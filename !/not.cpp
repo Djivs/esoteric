@@ -10,7 +10,9 @@ using namespace std;
 map <string, string> stringsMap;
 map <string, double> numbersMap;
 map <string, bool> booleansMap;
+
 int lineNumber;
+const short ERROR_MESSAGE_CODE_LINE_LENGTH = 10;
 
 const string dataTypes = "_$!";
 
@@ -21,9 +23,7 @@ void error(string message) {
 }
 
 void codeError(string message, string code, int errorIndex) {
-    if (code.length() > errorIndex + 11) {
-        code.substr(0, errorIndex + 10) + "...";
-    }
+    code = code.substr(errorIndex, ERROR_MESSAGE_CODE_LINE_LENGTH);
     string errorMessage = message + '\n' + to_string(lineNumber) + " | " + code + '\n';
     for (int i = 0; i < to_string(lineNumber).length() + 3 + errorIndex; ++i) {
         errorMessage += ' ';
@@ -47,27 +47,85 @@ void printString(string str) {
     }
 }
 
-
-
-string getStringFromCommand(string command) {
-    if (dataTypes.find(command[0]) == string::npos) {
-        return command;
+template <typename T> bool findVar(map <string, T> varMap, string varName) {
+    for (auto &i : varMap) {
+        if (i.first == varName) {
+            return true;
+        }
     }
-    string res;
+    return false;
+}
+
+double stringToDouble(string str) {
+    try {
+        return stod(str);
+    } catch (invalid_argument) {
+        error ("Can\'t covert to number: " + str);
+    }
+    return 0;
+}
+
+bool stringToBoolean(string str) {
+    if (str == "!") {
+        return false;
+    } else if (str == "!!") {
+        return true;
+    } else {
+        try {
+            return stoi(str);
+        } catch (invalid_argument) {
+            error ("Can\'t covert to boolean: " + str);
+        }   
+    }
+    return false;
+}
+vector <pair<char, string>> getParsedCommand(string command) {
+    vector <pair<char, string>> parsedCommands;
     bool plusModeEnabled = true;
     for (int i = 0; i < command.length(); ++i) {
-        if (command[i] == '_') {
-            if (i == command.length() - 1)
-                continue;
-            if (command[i+1] == ' ') {
-                if ((i < command.length() - 3 && command[i+2] == ' ' && command[i+3] == '+') || (i == command.length() - 2)) {
-                    if (plusModeEnabled) {
-                        res += ' ';
-                        i += 2;
-                        plusModeEnabled = false;
-                    } else {
-                        codeError("+ missing", command, i);
+        if (dataTypes.find(command[i]) != string::npos) {
+            if (i == command.length() - 1) {
+                if (plusModeEnabled) {
+                    if (command[i] == '!') {
+                        parsedCommands.push_back(make_pair('!', "0"));
+                        break;
                     }
+                } else {
+                    codeError("Type identifier without value", command, i);
+                }
+            } else if (command[i] == '!' && command[i+1] == '!' && i == command.length() - 2) {
+                parsedCommands.push_back(make_pair('!', "1"));
+                break;
+            } else if (i < command.length() - 2 && command[i] == '!' && command[i+1] == '!' && command[i+2] == ' ') {
+                parsedCommands.push_back(make_pair('!', "1"));
+                i += 2;
+                continue;
+            } else if (command[i] == '!' && command[i+1] == ' ') {
+                parsedCommands.push_back(make_pair('!', "0"));
+                ++i;
+                continue;
+            }
+
+
+            if (command[i+1] == ' ') {
+                if (!i) {
+                    ++i;
+                    continue;
+                }
+                if (command[i] == '_') {
+                    if ((i < command.length() - 3 && command[i+2] == ' ' && command[i+3] == '+') || (i == command.length() - 2)) {
+                        if (plusModeEnabled) {
+                            parsedCommands.push_back({'_', " "});
+                            i += 2;
+                            plusModeEnabled = false;
+                        } else {
+                            codeError("+ missing", command, i);
+                        }
+                    } else {
+                        codeError("Type identifier without value", command, i);
+                    }
+                } else {
+                    codeError("+ missing", command, i);
                 }
             } else {
                 if (!plusModeEnabled) {
@@ -76,246 +134,83 @@ string getStringFromCommand(string command) {
                 int j = i + 1;
                 for (; j < command.length() && command[j] != ' '; ++j);
                 string varName = command.substr(i+1, j - i - 1);
-                bool isVarExists = false;
-                for (auto &i : stringsMap) {
-                    if (i.first == varName) {
-                        res += i.second;
-                        isVarExists = true;
+                int firstSize = parsedCommands.size();
+                switch (command[i]) {
+                    case '_':
+                        if(findVar(stringsMap, varName)) {
+                            parsedCommands.push_back({command[i], stringsMap[varName]});
+                        }
                         break;
-                    }
+                    case '$':
+                        if(findVar(numbersMap, varName)) {
+                            parsedCommands.push_back({command[i], to_string(numbersMap[varName])});
+                        }
+                        break;
+                    case '!':
+                        if(findVar(booleansMap, varName)) {
+                            parsedCommands.push_back({command[i], to_string(booleansMap[varName])});
+                        }
+                        break;
                 }
-                if (isVarExists) {
-                    i = j;
-                    plusModeEnabled = false;
-                } else {
-                    res += varName;
+                if (firstSize == parsedCommands.size()) {
+                    for (; (j < command.length()) && (!((j < command.length() - 1) && (command[j] == ' ') && (command[j + 1] == '+'))); ++j);
+                    parsedCommands.push_back({command[i], command.substr(i + 1, j -i - 1)});
                 }
+                i = j;
+                plusModeEnabled = false;
             }
         } else if (command[i] == '+') {
             plusModeEnabled = true;
             if (((i != command.length() - 1) && (command[i+1] != ' ')) || (i == command.length() - 1)) {
                 codeError("Missing space after +", command, i);
             }
-            i++;
-        } else if (command[i] == '$' && i != command.length() - 1 && command[i+1] != ' ') {
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            bool isVarExists = false;
-            for (auto &i : numbersMap) {
-                if (i.first == varName) {
-                    res += to_string(i.second);
-                    isVarExists = true;
-                    break;
-                }
-            }
-            if (!isVarExists) {
-                try {
-                    double test = stod(varName);
-                } catch (invalid_argument) {
-                    codeError("No such number variable: " + varName, command, i + 1);
-                }
-                res += varName;
-            }
-            i = j;
-            plusModeEnabled = false;
-            
-        } else if (command[i] == '!' && i != command.length() - 1 && command[i+1] != ' ') {
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            if (varName == "!") {
-                res += '0';
-            } else if (varName == "!!") {
-                res += '1';
-            } else {
-                bool isVarExists = false;
-                for (auto &i : booleansMap) {
-                    if (i.first == command) {
-                        res += to_string((short)i.second);
-                        isVarExists = true;
-                        break;
-                    }
-                }
-                if (isVarExists) {
-                    i = j;
-                    plusModeEnabled = false;
-                } else {
-                    codeError("No such boolean variable: " + varName, command, i + 1);
-                }
-            }
+            ++i;
         }
+    }
+    return parsedCommands;
+}
+
+string getStringFromCommand(string command) {
+    vector <pair<char, string>> parsedCommand = getParsedCommand(command);
+    string res;
+    for (auto &i : parsedCommand) {
+        res += i.second;
     }
     return res;
 }
 double getNumberFromCommand(string command) {
-    if (dataTypes.find(command[0]) == string::npos) {
-        try {
-            return stod(command);
-        } catch (invalid_argument) {
-            codeError("Invalid number", command, 0);
+    vector <pair<char, string>> parsedCommand = getParsedCommand(command);
+    double res;
+    for (auto &i : parsedCommand) {
+        switch (i.first) {
+            case '_':
+                error ("Can't add string " + i.second + "to a number");
+            case '$':
+                res += stringToDouble(i.second);
+                break;
+            case '!':
+                res += stringToBoolean(i.second);
+                break;
         }
     }
-    double outputValue = 0;
-    bool plusModeEnabled = true;
-    for (int i = 0; i < command.length(); ++i) {
-        if (command[i] == '$') {
-            if ((i == command.length() - 1)) {
-                codeError("Can't add number without a value", command, i);
-            } else if (command[i+1] == ' ') {
-                if (!i) {
-                    ++i;
-                    continue;
-                } else {
-                    codeError("Can't add number without a value", command, i);
-                }
-            }
-            if (!plusModeEnabled) {
-                codeError("+ missing", command, i);
-            }
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            bool isVarExists = false;
-            for (auto &i : numbersMap) {
-                if (i.first == varName) {
-                    outputValue += i.second;
-                    isVarExists = true;
-                    break;
-                }
-            }
-            if (isVarExists) {
-                i = j;
-                plusModeEnabled = false;
-            } else {
-                try {
-                outputValue += stod(varName);
-                } catch (invalid_argument) {
-                    codeError("No variable with name " + varName, command, i);
-                }
-            }
-        } else if (command[i] == '+') {
-            plusModeEnabled = true;
-            if (((i != command.length() - 1) && (command[i+1] != ' ')) || (i == command.length() - 1)) {
-                codeError("Missing space after +", command, i);
-            }
-            i++;
-        } else if (command[i] == '_' && i != command.length() - 1 && command[i+1] != ' ') {
-            codeError("Can't add number and a string", command, i);
-        } else if (command[i] == '!' && i != command.length() - 1 && command[i+1] != ' ') {
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            if (varName == "!!") {
-                outputValue++;
-            } else  if (varName != "!") {
-                bool isVarExists = false;
-                for (auto &i : booleansMap) {
-                    if (i.first == command) {
-                        outputValue += i.second;
-                        isVarExists = true;
-                        break;
-                    }
-                }
-                if (isVarExists) {
-                    i = j;
-                    plusModeEnabled = false;
-                } else {
-                    codeError("No such boolean variable: " + varName, command, i + 1);
-                }
-            }
-        }
-    }
-    return outputValue;
+    return res;
 }
 bool getBooleanFromCommand(string command) {
-    if (dataTypes.find(command[0]) == string::npos) {
-        try {
-            return (bool)stoi(command);
-        } catch (invalid_argument) {
-            codeError("Invalid boolean", command, 0);
+    vector <pair<char, string>> parsedCommand = getParsedCommand(command);
+    bool res;
+    for (auto &i : parsedCommand) {
+        switch (i.first) {
+            case '_':
+                error ("Can't add string " + i.second + "to a number");
+            case '$':
+                res += (bool)stringToDouble(i.second);
+                break;
+            case '!':
+                res += stringToBoolean(i.second);
+                break;
         }
     }
-    bool outputValue = 0;
-    bool plusModeEnabled = true;
-    for (int i = 0; i < command.length(); ++i) {
-        if (command[i] == '!') {
-            if ((i == command.length() - 1)) {
-                codeError("Can't add boolean without a value", command, i);
-            } else if (command[i+1] == ' ') {
-                if (!i) {
-                    ++i;
-                    continue;
-                } else {
-                    codeError("Can't add boolean without a value", command, i);
-                }
-            }
-            if (!plusModeEnabled) {
-                codeError("+ missing", command, i);
-            }
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            if (varName == "!!") {
-                outputValue += true;
-                i = j;
-                plusModeEnabled = false;
-            } else if (varName == "!") {
-                i = j;
-                plusModeEnabled = false;  
-            } else {
-                bool isVarExists = false;
-                for (auto &i : booleansMap) {
-                    if (i.first == varName) {
-                        outputValue += i.second;
-                        isVarExists = true;
-                        break;
-                    }
-                }
-                if (isVarExists) {
-                    i = j;
-                    plusModeEnabled = false;
-                } else {
-                    try {
-                    outputValue += stoi(varName);
-                    } catch (invalid_argument) {
-                        codeError("No variable with name " + varName, command, i);
-                    }
-                }
-            }
-        } else if (command[i] == '+') {
-            plusModeEnabled = true;
-            if (((i != command.length() - 1) && (command[i+1] != ' ')) || (i == command.length() - 1)) {
-                codeError("Missing space after +", command, i);
-            }
-            i++;
-        } else if (command[i] == '_' && i != command.length() - 1 && command[i+1] != ' ') {
-            codeError("Can't add string and a boolean", command, i);
-        } else if (command[i] == '$' && i != command.length() - 1 && command[i+1] != ' ') {
-            int j = i + 1;
-            for (; j < command.length() && command[j] != ' '; ++j);
-            string varName = command.substr(i+1, j - i - 1);
-            bool isVarExists = false;
-            for (auto &i : numbersMap) {
-                if (i.first == command) {
-                    outputValue += (bool)i.second;
-                    isVarExists = true;
-                    break;
-                }
-            }
-            if (isVarExists) {
-                i = j;
-                plusModeEnabled = false;
-            } else {
-                try {
-                outputValue += stoi(varName);
-                } catch (invalid_argument) {
-                    codeError("No variable with name " + varName, command, i);
-                }
-            }
-        }
-    }
-    return outputValue;
+    return res;
 }
 
 
@@ -357,6 +252,9 @@ void initVar(string command) {
 
     switch (command[0]) {
         case '_':
+            if (varValue[0] != '_') {
+                varValue = '_' + varValue;
+            }
             stringValue = getStringFromCommand(varValue);
             for (auto &i : stringsMap) {
                 if (i.first == varName) {
@@ -367,6 +265,9 @@ void initVar(string command) {
             stringsMap.insert({varName, stringValue});
             break;
         case '$':
+            if (varValue[0] != '$') {
+                varValue = '$' + varValue;
+            }
             numberValue = getNumberFromCommand(varValue);
             for (auto &i : numbersMap) {
                 if (i.first == varName) {
@@ -377,6 +278,9 @@ void initVar(string command) {
             numbersMap.insert({varName, numberValue});
             break;
         case '!':
+            if (varValue[0] != '!') {
+                varValue = '!' + varValue;
+            }
             booleanValue = getBooleanFromCommand(varValue);
             for (auto &i : booleansMap) {
                 if (i.first == varName) {
@@ -445,11 +349,5 @@ int main(int argc, char *argv[]) {
         i = lineEndIndex;
         ++lineNumber;
     }
-
-    // for (auto &i : stringsMap) {
-    //     cout << i.first << " " << i.second << endl;
-    // }
-
-
     file.close();
 }

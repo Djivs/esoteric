@@ -13,5 +13,10 @@
     2.2 Numbers to booleans  
     2.3 Booleans to numbers  
     Other type conversions are forbidden
+3. To print a new line, print \n string. For example:  
+<code>#_Hello\nworld!</code>  
+Will print  
+<code>Hello  
+    World!</code>
 
 [Esolang wiki article](https://esolangs.org/wiki/!) 
