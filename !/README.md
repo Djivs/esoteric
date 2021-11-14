@@ -9,7 +9,7 @@
 ## Rules:
 1. Each command starts on a new line
 2. You can add:  
-    2.1 Numbers and booleans to strings
+    2.1 Numbers and booleans to strings  
     2.2 Numbers to booleans  
     2.3 Booleans to numbers  
     Other type conversions are forbidden
