@@ -1,1 +1,1 @@
-# esoteric-interpreters
+# esoteric
