@@ -8,10 +8,9 @@ int main(int argc, char** argv)
         return 0;
     }
 
-    string test_file_path = argv[1];
-    ifstream fs8(test_file_path);
-    if (!fs8.is_open()) {
-        cout << "Could not open " << test_file_path << endl;
+    ifstream file(argv[1]);
+    if (!file.is_open()) {
+        cout << "Could not open " << argv[1] << endl;
         return 0;
     }
 
@@ -19,7 +18,7 @@ int main(int argc, char** argv)
     char command = '⫵';
     unsigned char count = 0;
     
-    while (getline(fs8, line)) {
+    while (getline(file, line)) {
         for (auto &i : line) {
             count += (i == command);
         }
